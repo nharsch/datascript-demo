@@ -52,8 +52,8 @@
   (let [[people set-people!] (uix/use-state (get-all-people @db))]
     (uix/use-effect
       (fn []
+        ;; TODO: should only recalculate this when the query changes
         (let [listener-key (d/listen! db (fn [tx-report]
-                                          (println "db state change")
                                           (set-people! (get-all-people @db))))]
           #(d/unlisten! db listener-key)))
       [])
