@@ -1,0 +1,13 @@
+{:source-paths ["src/main"]
+ :dependencies [[datascript "1.7.8"]
+                [com.pitch/uix.core "1.4.5"]
+                [com.pitch/uix.dom "1.4.4"]
+                [nrepl "1.0.0"]
+                [cider/cider-nrepl "0.45.0"]]
+ :nrepl {:port 7002}
+ :builds {:app {:target :browser
+                :output-dir "public/js"
+                :asset-path "/js"
+                :modules {:main {:entries [datascript-app.core]}}
+                :devtools {:http-root "public"
+                          :http-port 8080}}}}
