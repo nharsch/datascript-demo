@@ -8,7 +8,6 @@
 (def app-schema
   {
    :db/ident {:db/unique :db.unique/identity}
-   ;; :staff/id {:db/unique :db.unique/identity}
    :staff/name {:db/unique :db.unique/identity}
    :staff/department {:db/valueType :db.type/ref}
 
@@ -33,30 +32,33 @@
 
 (defonce db (d/create-conn app-schema))
 
-(defn add-staff! [name dep-name]
-  (println "Added staff" name)
-  (d/transact! db [{:staff/id (random-uuid)
-                    :staff/name name
-                    :staff/department [:department/name  dep-name]}]
-               ))
+(defn add-staff!
+    ([name]
+     (println "Added staff" name)
+     (d/transact! db [{:staff/name name}]))
+    ([name dep-name]
+     (println "Added staff" name "to department" dep-name)
+     (d/transact! db [{:staff/name name
+                       :staff/department [:department/name  dep-name]}]
+                  )))
 
 (defn add-department!
   ([name]
    (println "Added department" name)
-   (d/transact! db [{:department/name name}]))
+   (d/transact! db [{:department/name name
+                     :department/enabled true
+                     }]))
   ([name dep-manager-name]
    (println "Added department" name "with manager" dep-manager-name)
    (d/transact! db [{:department/name name
-                     :department/manager [:staff/name dep-manager-name]}])))
+                     :department/manager [:staff/name dep-manager-name]
+                     :department/enabled true
+                     }])))
 
 (defn get-all-staff [db]
-  (d/q '[:find ?id ?name ?depname
+  (d/q '[:find ?name
          :where
-         [?e :staff/name ?name]
-         [?e :staff/id ?id]
-         [?e :staff/department ?depid]
-         [?depid :department/name ?depname]
-         ]
+         [?e :staff/name ?name]]
        db))
 
 (defn get-selected-departments [db]
@@ -68,10 +70,9 @@
        db))
 
 (defn get-selected-staff [db]
-  (d/q '[:find ?id ?name
+  (d/q '[:find ?name
          :where
          [?e :staff/name ?name]
-         [?e :staff/id ?id]
          [?e :staff/department ?depid]
          [?depid :department/enabled true]
          ]
@@ -100,11 +101,12 @@
         [department set-department!] (uix/use-state "")
         handle-submit (fn [e]
                         (.preventDefault e)
-                        (when (seq name)
-                          (add-staff! name department)
-                          ;; TODO: gotta be a better way to reset form
-                          (set-name! "")
-                          (set-department! "")))]
+                        (cond
+                          (and (seq name) (seq department)) (add-staff! name department)
+                          (seq name) (add-staff! name))
+                        ;; TODO: gotta be a better way to reset form
+                        (set-name! "")
+                        (set-department! ""))]
     ($ :div
        ($ :h2 "Add Staff")
        ($ :form {:on-submit handle-submit}
@@ -141,15 +143,14 @@
              ($ :input {:type "text"
                         :value name
                         :on-change #(set-name! (.. % -target -value))})
-             ($ :label "Manager (optional): ")
+             ($ :label " Manager (optional): ")
              ($ :select {:value manager
                          :on-change #(set-manager (.. % -target -value))}
                 ($ :option {:value ""} "-- Select Manager --")
-                (for [[_ manager-name _2] (get-all-staff @db)]
+                (for [[manager-name] (get-all-staff @db)]
                   ($ :option {:key manager-name :value manager-name} manager-name))))
 
-          ($ :button {:type "submit"} "Add Department"))))
-  )
+          ($ :button {:type "submit"} "Add Department")))))
 
 
 (defn department-enabled? [dep-name]
@@ -216,8 +217,8 @@
     ($ :div
        ($ :h2 "Staff")
        ($ :ul
-          (for [[id name] staff]
-            ($ :li {:key id} name))))))
+          (for [[name] staff]
+            ($ :li {:key name} name))))))
 
 
 (defui all-departments []
