@@ -1,27 +1,15 @@
 (ns datascript-app.core
   (:require [datascript.core :as d]
             [uix.core :as uix :refer [defui $]]
-            [uix.dom]))
+            [uix.dom]
+            [datascript-app.mermaid :as mermaid]))
 
-
-
-;; TODO:
-;;
-;; define reusable queries
-;; - staff/managed-staff
-;; - department/staff
-;;
-;; staff selection should be multi select
-;; keep track of selected state on the department
-;; - department/selected true
 
 (def app-schema
-  ;; todo: how to define staff as a set of people
   {
    :db/ident {:db/unique :db.unique/identity}
    ;; :staff/id {:db/unique :db.unique/identity}
    :staff/name {:db/unique :db.unique/identity}
-   ;; TODO: if possible, I'd like to use the department name as the ref
    :staff/department {:db/valueType :db.type/ref}
 
    :department/name {:db/unique :db.unique/identity}
@@ -101,8 +89,6 @@
                     :app/selected-department [:department/name dep]}])
   )
 
-(defn clear-selected-department! []
-  (d/transact! db [[:db/retract [:db/ident :app/singleton] :app/selected-department]]))
 
 (defui add-staff-form []
   (let [[name set-name!] (uix/use-state "")
@@ -180,16 +166,19 @@
        dep-name)))
 
 
-
-(defui staff-list []
-  (let [[staff set-staff!] (uix/use-state (get-selected-staff @db))]
+;; Generic hook for live queries - automatically updates when db changes
+(defn use-live-query [query-fn]
+  (let [[results set-results!] (uix/use-state (query-fn @db))]
     (uix/use-effect
      (fn []
-       ;; TODO: should only recalculate this when the query changes
        (let [listener-key (d/listen! db (fn [tx-report]
-                                          (set-staff! (get-selected-staff @db))))]
+                                          (set-results! (query-fn @db))))]
          #(d/unlisten! db listener-key)))
-     [])
+     [query-fn])
+    results))
+
+(defui staff-list []
+  (let [staff (use-live-query get-selected-staff)]
     ($ :div
        ($ :h2 "Staff")
        ($ :ul
@@ -198,26 +187,60 @@
 
 
 (defui all-departments []
-  (let [[departments set-departments!] (uix/use-state (get-all-departments @db))]
-    (uix/use-effect
-     (fn []
-       ;; TODO: should only recalculate this when the query changes
-       (let [listener-key (d/listen! db (fn [tx-report]
-                                          (set-departments! (get-all-departments @db))))]
-         #(d/unlisten! db listener-key)))
-     [])
+  (let [departments (use-live-query get-all-departments)]
     ($ :div
        ($ :h2 "Departments")
        ($ :ul
           (for [[name] departments]
             ($ :li {:key name} ($ department-pill {:dep-name name})))))))
 
+
+
+(defn get-dep-staff-edges [db]
+  (vec
+   (d/q '[:find ?department-name ?staff-name
+          :where
+          [?dep :department/enabled true]
+          [?dep :department/name ?department-name]
+          [?staff :staff/department ?dep]
+          [?manager :staff/name ?manager-name]
+          [?staff :staff/name ?staff-name]
+          ]
+        db)))
+
+(defn get-manager-dep-edges [db]
+  (map #(conj % "manages")
+   (d/q '[:find ?manager-name ?dep-name
+          :where
+          [?dep :department/name ?dep-name]
+          [?dep :department/manager ?manager-id]
+          [?dep :department/enabled true]
+          [?manager-id :staff/name ?manager-name]]
+        db)))
+
+(comment
+  (get-dep-staff-edges @db)
+  (get-manager-dep-edges @db)
+  )
+
+(defui org-chart []
+  (let [dep-staff-edges (use-live-query get-dep-staff-edges)
+        manager-edges (use-live-query get-manager-dep-edges)
+        edges (concat dep-staff-edges manager-edges)
+        ]
+    (println "org chart edges" edges)
+    ($ :div
+       ($ :h3 "Organization Chart")
+       ($ mermaid/simple-graph {:edges edges}))))
+
 (defui app []
   ($ :div
-     ($ :h1 "DataScript App with UIX2")
+     ($ :h1 "Org Chart Visuzlizer")
+     ($ :p "Built with DataScript and UIX2")
      ($ all-departments)
-     ($ staff-list)
+     ;; ($ staff-list)
      ($ add-staff-form)
+     ($ org-chart)
      ))
 
 (defonce root (uix.dom/create-root (js/document.getElementById "app")))
@@ -234,33 +257,10 @@
                     "Bob" "IT"
                     "Mary" "Sales"
                     ])
-  ;; TODO: but this does not
   (add-staff! "Alice" "Facilities")
   (get-all-staff @db)
   (set-selected-department! "IT")
   (set-selected-department! nil)
-  (d/q '[:find ?name
-         :where
-         [_ :app/selected-department ?dep]
-         [?dep :department/name ?name]
-         ]
-       @db)
-  ;; TODO: Claude, is it possible to make these composable?
-  (d/q '[:find ?department-name
-         :where
-         [?manager-id :staff/name "Benedict"]
-         [?dep :department/manager ?manager-id]
-         [?dep :department/name ?department-name]
-         ]
-       @db)
-  ;; TODO: Claude, I'm doing the above query again here, I'd like to do something like :staff/managed-deps
-  (d/q '[:find ?staff-name
-         :where
-         [?manager-id :staff/name "Benedict"]
-         [?dep :department/manager ?manager-id]
-         [?staff-id :staff/department ?dep]
-         [?staff-id :staff/name ?staff-name]]
-       @db)
   )
 
 
@@ -276,7 +276,9 @@
                                ["Bob" "IT"]
                                ["Mary" "Sales"]])
   (d/transact! db [{:department/name "IT"
-                    :department/manager [:staff/name "Benedict"]}])
+                    :department/manager [:staff/name "Benedict"]
+                    :department/enabled true}])
+
   (uix.dom/render-root ($ app) root))
 
 (init)
