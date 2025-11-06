@@ -40,9 +40,14 @@
                     :staff/department [:department/name  dep-name]}]
                ))
 
-(defn add-department! [name]
-  (println "Added department" name)
-  (d/transact! db [{:department/name name}]))
+(defn add-department!
+  ([name]
+   (println "Added department" name)
+   (d/transact! db [{:department/name name}]))
+  ([name dep-manager-name]
+   (println "Added department" name "with manager" dep-manager-name)
+   (d/transact! db [{:department/name name
+                     :department/manager [:staff/name dep-manager-name]}])))
 
 (defn get-all-staff [db]
   (d/q '[:find ?id ?name ?depname
@@ -117,6 +122,35 @@
              )
           ($ :button {:type "submit"} "Add Staff")))))
 
+(defui add-department-form []
+  (let [[name set-name!] (uix/use-state "")
+        [manager set-manager] (uix/use-state "")
+        handle-submit (fn [e]
+                        (.preventDefault e)
+                        (cond
+                          (and (seq name) (seq manager)) (add-department! name manager)
+                          (seq name) (add-department! name))
+                        (set-name! "")
+                        (set-manager "")
+                        )]
+    ($ :div
+       ($ :h2 "Add Department")
+       ($ :form {:on-submit handle-submit}
+          ($ :div
+             ($ :label "Name: ")
+             ($ :input {:type "text"
+                        :value name
+                        :on-change #(set-name! (.. % -target -value))})
+             ($ :label "Manager (optional): ")
+             ($ :select {:value manager
+                         :on-change #(set-manager (.. % -target -value))}
+                ($ :option {:value ""} "-- Select Manager --")
+                (for [[_ manager-name _2] (get-all-staff @db)]
+                  ($ :option {:key manager-name :value manager-name} manager-name))))
+
+          ($ :button {:type "submit"} "Add Department"))))
+  )
+
 
 (defn department-enabled? [dep-name]
   (boolean
@@ -190,9 +224,9 @@
   (let [departments (use-live-query get-all-departments)]
     ($ :div
        ($ :h2 "Departments")
-       ($ :ul
-          (for [[name] departments]
-            ($ :li {:key name} ($ department-pill {:dep-name name})))))))
+       (for [[name] departments]
+         ($ :span {:key name :style {:margin "4px"}}
+            ($ department-pill {:dep-name name}))))))
 
 
 
@@ -235,12 +269,13 @@
 
 (defui app []
   ($ :div
-     ($ :h1 "Org Chart Visuzlizer")
+     ($ :h1 "Org Chart Visualizer")
      ($ :p "Built with DataScript and UIX2")
      ($ all-departments)
      ;; ($ staff-list)
-     ($ add-staff-form)
      ($ org-chart)
+     ($ add-staff-form)
+     ($ add-department-form)
      ))
 
 (defonce root (uix.dom/create-root (js/document.getElementById "app")))
