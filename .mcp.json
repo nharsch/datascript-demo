@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "clojure-mcp": {
+      "command": "/bin/sh",
+      "args": [
+        "-c",
+        "PATH=/usr/local/bin:$PATH && clojure -X:mcp :port 7002"
+      ]
+    }
+  }
+}

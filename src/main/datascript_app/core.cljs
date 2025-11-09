@@ -4,10 +4,8 @@
             [uix.dom]
             [datascript-app.mermaid :as mermaid]))
 
-
 (def app-schema
-  {
-   :db/ident {:db/unique :db.unique/identity}
+  {:db/ident {:db/unique :db.unique/identity}
    :staff/name {:db/unique :db.unique/identity}
    :staff/department {:db/valueType :db.type/ref}
 
@@ -17,43 +15,36 @@
    :app/staff {:db/valueType :db.type/ref :db/cardinality :db.cardinality/many}
    :app/departments {:db/valueType :db.type/ref :db/cardinality :db.cardinality/many}
    :app/selected-department {:db/valueType :db.type/ref
-                             :db/cardinality :db.cardinality/one}
-   })
+                             :db/cardinality :db.cardinality/one}})
 
 ;; RULES: rules allow for query composition and reuse
-(def rules '[
-             [(manages-department ?manager ?dep)
+(def rules '[[(manages-department ?manager ?dep)
               [?dep :department/manager ?manager]]
              [(manages-staff ?manager ?staff)
               (manages-department ?manager ?dep)
-              [?staff :staff/department ?dep]]
-             ])
-
+              [?staff :staff/department ?dep]]])
 
 (defonce db (d/create-conn app-schema))
 
 (defn add-staff!
-    ([name]
-     (println "Added staff" name)
-     (d/transact! db [{:staff/name name}]))
-    ([name dep-name]
-     (println "Added staff" name "to department" dep-name)
-     (d/transact! db [{:staff/name name
-                       :staff/department [:department/name  dep-name]}]
-                  )))
+  ([name]
+   (println "Added staff" name)
+   (d/transact! db [{:staff/name name}]))
+  ([name dep-name]
+   (println "Added staff" name "to department" dep-name)
+   (d/transact! db [{:staff/name name
+                     :staff/department [:department/name dep-name]}])))
 
 (defn add-department!
   ([name]
    (println "Added department" name)
    (d/transact! db [{:department/name name
-                     :department/enabled true
-                     }]))
+                     :department/enabled true}]))
   ([name dep-manager-name]
    (println "Added department" name "with manager" dep-manager-name)
    (d/transact! db [{:department/name name
                      :department/manager [:staff/name dep-manager-name]
-                     :department/enabled true
-                     }])))
+                     :department/enabled true}])))
 
 (defn get-all-staff [db]
   (d/q '[:find ?name
@@ -65,8 +56,7 @@
   (d/q '[:find ?name
          :where
          [_ :app/selected-department ?dep]
-         [?dep :department/name ?name]
-         ]
+         [?dep :department/name ?name]]
        db))
 
 (defn get-selected-staff [db]
@@ -74,27 +64,22 @@
          :where
          [?e :staff/name ?name]
          [?e :staff/department ?depid]
-         [?depid :department/enabled true]
-         ]
+         [?depid :department/enabled true]]
        db))
 
 (comment
   (get-selected-departments @db)
-  (get-selected-staff @db)
-  )
+  (get-selected-staff @db))
 
 (defn get-all-departments [db]
   (d/q '[:find ?name
          :where
-         [?e :department/name ?name]
-         ]
+         [?e :department/name ?name]]
        db))
 
 (defn set-selected-department! [dep]
   (d/transact! db [{:db/ident :app/singleton
-                    :app/selected-department [:department/name dep]}])
-  )
-
+                    :app/selected-department [:department/name dep]}]))
 
 (defui add-staff-form []
   (let [[name set-name!] (uix/use-state "")
@@ -120,8 +105,7 @@
                          :on-change #(set-department! (.. % -target -value))}
                 ($ :option {:value ""} "-- Select Department --")
                 (for [[dep-name] (get-all-departments @db)]
-                  ($ :option {:key dep-name :value dep-name} dep-name)))
-             )
+                  ($ :option {:key dep-name :value dep-name} dep-name))))
           ($ :button {:type "submit"} "Add Staff")))))
 
 (defui add-department-form []
@@ -133,8 +117,7 @@
                           (and (seq name) (seq manager)) (add-department! name manager)
                           (seq name) (add-department! name))
                         (set-name! "")
-                        (set-manager "")
-                        )]
+                        (set-manager ""))]
     ($ :div
        ($ :h2 "Add Department")
        ($ :form {:on-submit handle-submit}
@@ -152,7 +135,6 @@
 
           ($ :button {:type "submit"} "Add Department")))))
 
-
 (defn department-enabled? [dep-name]
   (boolean
    (ffirst
@@ -166,8 +148,7 @@
 (comment
   (department-enabled? "IT")
   (department-enabled? "Operations")
-  (enabled-deparments)
-  )
+  (enabled-deparments))
 
 (defn toggle-department-enabled! [dep-name]
   (if (department-enabled? dep-name)
@@ -182,8 +163,6 @@
          [?e :department/enabled true]]
        @db))
 
-
-
 (defui department-pill [{:keys [dep-name]}]
   (let [[enabled set-enabled!] (uix/use-state (department-enabled? dep-name))
         handle-click (fn [e]
@@ -197,9 +176,12 @@
          #(d/unlisten! db listener-key)))
      [dep-name])
     ($ :button {:on-click handle-click
-                :style {:background-color (if enabled "lightgreen" "lightgray")}}
+                :style {:background-color (if enabled "lightgreen" "lightgray")
+                        :border-radius "20px"
+                        :padding "8px 16px"
+                        :border "1px solid #ccc"
+                        :cursor "pointer"}}
        dep-name)))
-
 
 ;; Generic hook for live queries - automatically updates when db changes
 (defn use-live-query [query-fn]
@@ -220,7 +202,6 @@
           (for [[name] staff]
             ($ :li {:key name} name))))))
 
-
 (defui all-departments []
   (let [departments (use-live-query get-all-departments)]
     ($ :div
@@ -228,8 +209,6 @@
        (for [[name] departments]
          ($ :span {:key name :style {:margin "4px"}}
             ($ department-pill {:dep-name name}))))))
-
-
 
 (defn get-dep-staff-edges [db]
   (vec
@@ -239,34 +218,39 @@
           [?dep :department/name ?department-name]
           [?staff :staff/department ?dep]
           [?manager :staff/name ?manager-name]
-          [?staff :staff/name ?staff-name]
-          ]
+          [?staff :staff/name ?staff-name]]
         db)))
 
 (defn get-manager-dep-edges [db]
   (map #(conj % "manages")
-   (d/q '[:find ?manager-name ?dep-name
-          :where
-          [?dep :department/name ?dep-name]
-          [?dep :department/manager ?manager-id]
-          [?dep :department/enabled true]
-          [?manager-id :staff/name ?manager-name]]
-        db)))
+       (d/q '[:find ?manager-name ?dep-name
+              :where
+              [?dep :department/name ?dep-name]
+              [?dep :department/manager ?manager-id]
+              [?dep :department/enabled true]
+              [?manager-id :staff/name ?manager-name]]
+            db)))
 
 (comment
   (get-dep-staff-edges @db)
-  (get-manager-dep-edges @db)
-  )
+  (get-manager-dep-edges @db))
 
 (defui org-chart []
   (let [dep-staff-edges (use-live-query get-dep-staff-edges)
         manager-edges (use-live-query get-manager-dep-edges)
         edges (concat dep-staff-edges manager-edges)
-        ]
+        ;; Get all staff and department names
+        all-staff (use-live-query get-all-staff)
+        all-departments (use-live-query get-all-departments)
+        ;; Flatten from sets of tuples to lists of names
+        staff-names (map first all-staff)
+        dept-names (map first all-departments)]
     (println "org chart edges" edges)
     ($ :div
        ($ :h3 "Organization Chart")
-       ($ mermaid/simple-graph {:edges edges}))))
+       ($ mermaid/org-chart-graph {:staff staff-names
+                                   :departments dept-names
+                                   :edges edges}))))
 
 (defui app []
   ($ :div
@@ -276,29 +260,23 @@
      ;; ($ staff-list)
      ($ org-chart)
      ($ add-staff-form)
-     ($ add-department-form)
-     ))
+     ($ add-department-form)))
 
 (defonce root (uix.dom/create-root (js/document.getElementById "app")))
-
 
 (comment
   (run! add-department! ["Facilities"
                          "Sales"
                          "Operations"
-                         "IT"
-                         ])
+                         "IT"])
   (get-all-departments @db)
   (run! add-staff! ["Alice" "Facilities"
                     "Bob" "IT"
-                    "Mary" "Sales"
-                    ])
+                    "Mary" "Sales"])
   (add-staff! "Alice" "Facilities")
   (get-all-staff @db)
   (set-selected-department! "IT")
-  (set-selected-department! nil)
-  )
-
+  (set-selected-department! nil))
 
 (defn init []
   (js/console.log "starting...")

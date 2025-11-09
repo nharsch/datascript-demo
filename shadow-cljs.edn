@@ -10,4 +10,4 @@
                 :asset-path "/js"
                 :modules {:main {:entries [datascript-app.core]}}
                 :devtools {:http-root "public"
-                          :http-port 8080}}}}
+                           :http-port 8080}}}}
